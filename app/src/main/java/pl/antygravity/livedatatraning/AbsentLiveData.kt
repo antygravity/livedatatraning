@@ -17,14 +17,19 @@
 package pl.antygravity.livedatatraning
 
 import androidx.lifecycle.LiveData
-import retrofit2.Call
-import retrofit2.http.GET
-import retrofit2.http.Path
 
 /**
- * REST API access points
+ * A LiveData class that has `null` value.
  */
-interface GithubService {
-    @GET("users/{login}")
-    fun getUser(@Path("login") login: String): LiveData<ApiResponse<User>>
+class AbsentLiveData<T : Any?> private constructor() : LiveData<T>() {
+    init {
+        // use post instead of set since this can be created on any thread
+        postValue(null)
+    }
+
+    companion object {
+        fun <T> create(): LiveData<T> {
+            return AbsentLiveData()
+        }
+    }
 }

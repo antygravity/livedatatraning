@@ -1,40 +1,32 @@
 package pl.antygravity.livedatatraning
 
 import android.os.Bundle
-import com.google.android.material.snackbar.Snackbar
-import androidx.appcompat.app.AppCompatActivity;
+import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.LiveData
+import androidx.lifecycle.MutableLiveData
+import androidx.lifecycle.Observer
+import androidx.lifecycle.Transformations
 import com.bumptech.glide.Glide
-import com.google.gson.GsonBuilder
-
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.android.synthetic.main.activity_main.*
 import kotlinx.android.synthetic.main.content_main.*
-import retrofit2.Call
-import retrofit2.Callback
-import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
 
-class MainActivity : AppCompatActivity(), Callback<User> {
+class MainActivity : AppCompatActivity() {
 
-    override fun onResponse(call: Call<User>, response: Response<User>) {
+    val TAG = MainActivity::class.java.simpleName
 
-        println(response.body())
+    private val login = MutableLiveData<String>()
 
-        var user: User = response.body()!!
+    lateinit var user: LiveData<ApiResponse<User>>
 
-        if (response.isSuccessful) {
-            Glide.with(this).load(user.avatarUrl).into(imageView)
-        }
-    }
 
-    override fun onFailure(call: Call<User>, t: Throwable) {
-        t.printStackTrace()
-    }
-
-    lateinit var  service : GithubService
+    lateinit var service: GithubService
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -44,11 +36,10 @@ class MainActivity : AppCompatActivity(), Callback<User> {
         setup()
 
         button.setOnClickListener { view ->
-            val text =  editText.text
+            val text : String = editText.text.toString()
             imageView.setImageResource(0)
 
-            val userCall: Call<User> = service.getUser(text.toString())
-            userCall.enqueue(this)
+            login.value = text
         }
 
         fab.setOnClickListener { view ->
@@ -60,10 +51,40 @@ class MainActivity : AppCompatActivity(), Callback<User> {
     private fun setup() {
         val retrofit = Retrofit.Builder()
             .baseUrl("https://api.github.com/")
-            .addConverterFactory(GsonConverterFactory.create(GsonBuilder().create()))
+            .addConverterFactory(GsonConverterFactory.create())
+            .addCallAdapterFactory(LiveDataCallAdapterFactory())
             .build()
 
         service = retrofit.create(GithubService::class.java)
+        user = Transformations.switchMap(login) {log ->
+            if (log == null) {
+                AbsentLiveData.create()
+            } else {
+                service.getUser(log)
+            }
+
+        }
+
+        user.observe(this, Observer { apiResponse ->
+                when (apiResponse) {
+                    is ApiSuccessResponse -> {
+
+                        val user : User =  apiResponse.body
+
+                        Log.d(TAG, "User: " + user)
+
+                       Glide.with(this).load(user.avatarUrl).into(imageView)
+                    }
+
+                    is ApiEmptyResponse -> {
+
+                    }
+                    is ApiErrorResponse -> {
+                        Log.e(TAG, "Error" + apiResponse.errorMessage)
+
+                    }
+                }
+        })
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
